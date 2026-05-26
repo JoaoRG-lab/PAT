@@ -1,0 +1,61 @@
+name: Unzip ZIP and commit to repo
+
+on:
+  workflow_dispatch:
+    inputs:
+      zip_path:
+        description: "Caminho do arquivo .zip dentro do repo"
+        required: true
+        default: ".incoming/upload.zip"
+      target_dir:
+        description: "Pasta de destino para extrair os arquivos"
+        required: true
+        default: "app"
+      remove_zip_after_extract:
+        description: "Remover o ZIP depois de extrair? true/false"
+        required: true
+        default: "false"
+
+permissions:
+  contents: write
+
+jobs:
+  unzip-and-commit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate ZIP exists
+        run: |
+          if [ ! -f "${{ inputs.zip_path }}" ]; then
+            echo "Arquivo ZIP não encontrado: ${{ inputs.zip_path }}"
+            exit 1
+          fi
+
+      - name: Safely unzip file
+        run: |
+          python scripts/safe_unzip.py \
+            "${{ inputs.zip_path }}" \
+            "${{ inputs.target_dir }}"
+
+      - name: Optionally remove ZIP
+        if: ${{ inputs.remove_zip_after_extract == 'true' }}
+        run: |
+          rm -f "${{ inputs.zip_path }}"
+
+      - name: Commit extracted files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add .
+
+          if git diff --cached --quiet; then
+            echo "Nenhuma alteração para commitar."
+            exit 0
+          fi
+
+          git commit -m "chore: unzip ${{ inputs.zip_path }} into ${{ inputs.target_dir }}"
+          git push
